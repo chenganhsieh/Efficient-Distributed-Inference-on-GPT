@@ -8,7 +8,6 @@ from datasets import load_dataset
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
-
 def setup_distributed():
     # Initialize the process group
     dist.init_process_group(backend='nccl')

@@ -89,7 +89,7 @@ for epoch in range(num_epochs):
 
         # Total loss
         loss = alpha * loss_distill + beta * loss_student
-        print(f"====================== Batch idx:{idx}, loss:{loss} ======================", end="\r")
+        print(f"==========Epoch:{epoch}, Batch idx:{idx}, loss:{loss} ===========", end="\r")
 
         loss.backward()
         optimizer.step()
@@ -181,7 +181,6 @@ def measure_inference_metrics(model, dataloader):
     print(f"Perplexity: {perplexity.item():.2f}")
     print(f"Token-Level Accuracy: {accuracy:.2f}%")
 
-
-
+torch.save(student_model.state_dict(), "student.pth")
 # evaluate(student_model, valid_loader)
 measure_inference_metrics(student_model, valid_loader)

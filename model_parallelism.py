@@ -9,9 +9,6 @@ from datasets import load_dataset
 import time
 import psutil
 import os
-from evaluate import evaluate
-from metrics import measure_inference_metrics
-from fairscale.nn.data_parallel import FullyShardedDataParallel as FSDP
 
 class GPT2Segment1(nn.Module):
     def __init__(self, original_model):
@@ -26,6 +23,7 @@ class GPT2Segment1(nn.Module):
         self.config = original_model.config
 
     def forward(self, input_ids, attention_mask=None):
+        batch_size = input_ids.shape[0]
         device = input_ids.device
         # Create position ids
         position_ids = torch.arange(0, input_ids.size(1), dtype=torch.long, device=device)
@@ -33,14 +31,14 @@ class GPT2Segment1(nn.Module):
         # Get embeddings
         inputs_embeds = self.wte(input_ids) + self.wpe(position_ids)
         hidden_states = self.dropout(inputs_embeds)
+        attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
+
         # **Modify attention_mask**
         if attention_mask is not None:
-            # Convert attention_mask to float and invert it
-            attention_mask = attention_mask.to(device).unsqueeze(1).unsqueeze(2)
-            attention_mask = attention_mask.to(dtype=hidden_states.dtype)  # Convert to the same dtype as hidden_states
-            attention_mask = (1.0 - attention_mask) * -10000.0  # Apply scaling
-        else:
-            attention_mask = None
+            attention_mask = attention_mask[:, None, None, :]
+            # attention_mask = attention_mask.to(dtype=input_ids.dtype)
+            # attention_mask = (1.0 - attention_mask) * torch.finfo(input_ids.dtype).min
+       
         # Apply transformer blocks
         for block in self.transformer_blocks:
             outputs = block(hidden_states, attention_mask=attention_mask)
@@ -63,14 +61,12 @@ class GPT2Segment2(nn.Module):
     def forward(self, hidden_states, attention_mask=None):
         device = next(self.parameters()).device
         # **Modify attention_mask**
+        
         if attention_mask is not None:
-            # Convert attention_mask to float and invert it
-            attention_mask = attention_mask.to(device).unsqueeze(1).unsqueeze(2)
-            attention_mask = attention_mask.to(dtype=hidden_states.dtype)  # Convert to the same dtype as hidden_states
-            attention_mask = (1.0 - attention_mask) * -10000.0  # Apply scaling
-        else:
-            attention_mask = None
-            attention_mask = attention_mask.to(device)
+            attention_mask = attention_mask[:, None, None, :]
+            # attention_mask = attention_mask.to(dtype=self.dtype)
+            # attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+
         # Apply transformer blocks
         for block in self.transformer_blocks:
             outputs = block(hidden_states, attention_mask=attention_mask)
@@ -80,6 +76,33 @@ class GPT2Segment2(nn.Module):
         # Get logits
         logits = self.lm_head(hidden_states)
         return logits
+    
+def model_parallel_inference_with_loss(input_ids, attention_mask=None, labels=None):
+    # Move inputs to device0
+    input_ids = input_ids.to(device0)
+    attention_mask = attention_mask.to(device0) if attention_mask is not None else None
+    labels = labels.to(device1) if labels is not None else None  # Labels needed on device1 for loss calculation
+
+    # Forward pass through segment 1
+    hidden_states = model_segment1(input_ids, attention_mask=attention_mask)
+
+    # Move hidden_states to device1
+    hidden_states = hidden_states.to(device1)
+    if attention_mask is not None:
+        attention_mask = attention_mask.to(device1)
+
+    # Forward pass through segment 2
+    logits = model_segment2(hidden_states, attention_mask=attention_mask)
+
+    # Compute loss if labels are provided
+    if labels is not None:
+        loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()  # Shift labels to align with logits
+        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        return logits, loss
+    else:
+        return logits, None
 
 # Load the Penn Treebank dataset
 dataset = load_dataset('ptb_text_only', 'penn_treebank')
@@ -112,47 +135,71 @@ model_segment1 = GPT2Segment1(original_model).to(device0)
 model_segment2 = GPT2Segment2(original_model).to(device1)
 
 
-def model_parallel_inference(input_ids, attention_mask=None):
-    # Move inputs to device0
-    input_ids = input_ids.to(device0)
-    attention_mask = attention_mask.to(device0) if attention_mask is not None else None
-
-    # Forward pass through segment 1
-    hidden_states = model_segment1(input_ids, attention_mask=attention_mask)
-
-    # Move hidden_states to device1
-    hidden_states = hidden_states.to(device1)
-    if attention_mask is not None:
-        attention_mask = attention_mask.to(device1)
-
-    # Forward pass through segment 2
-    logits = model_segment2(hidden_states, attention_mask=attention_mask)
-    return logits
-
-# Example inference
 def inference(model_fn, dataloader):
     model_segment1.eval()
     model_segment2.eval()
     latencies = []
+    total_loss = 0
+    total_tokens = 0
+    correct_predictions = 0
+    total_predictions = 0
+
     with torch.no_grad():
         for idx, batch in enumerate(dataloader):
-            print(f"Batch:{idx}|{len(dataloader)}", end="\r")
+            print(f"Batch:{idx+1}/{len(dataloader)}", end="\r")
             input_ids = batch[0]
             attention_mask = batch[1]
 
+            # Prepare labels
+            labels = input_ids.clone()
+            labels[input_ids == tokenizer.pad_token_id] = -100  # Ignore padding tokens
+            # **Move labels to device1**
+            labels = labels.to(device1)
+
+            # Measure latency
             start_time = time.time()
-            logits = model_fn(input_ids, attention_mask)
+            logits, loss = model_fn(input_ids, attention_mask, labels)
             latency = time.time() - start_time
             latencies.append(latency)
 
+            # Accumulate loss
+            if loss is not None:
+                total_loss += loss.item() * input_ids.size(0)
+
+            # Compute token-level accuracy
+            predictions = torch.argmax(logits, dim=-1)
+            # Mask to ignore padding tokens
+            mask = labels != -100
+            correct = (predictions == labels) & mask
+            correct_predictions += correct.sum().item()
+            total_predictions += mask.sum().item()
+
+            # Update total tokens
+            total_tokens += mask.sum().item()
+
+    # Compute average latency and throughput
     avg_latency = sum(latencies) / len(latencies)
-    throughput = len(dataloader.dataset) / sum(latencies)
+    total_time = sum(latencies)
+    throughput = total_tokens / total_time  # Tokens per second
+
+    # Compute memory usage
     memory_usage0 = torch.cuda.max_memory_allocated(device0) / (1024 ** 3)
     memory_usage1 = torch.cuda.max_memory_allocated(device1) / (1024 ** 3)
     total_memory_usage = memory_usage0 + memory_usage1
-    print(f"Average Latency: {avg_latency * 1000:.2f} ms/query")
-    print(f"Throughput: {throughput:.2f} queries/second")
+
+    # Compute perplexity
+    avg_loss = total_loss / len(dataloader.dataset)
+    perplexity = torch.exp(torch.tensor(avg_loss))
+
+    # Compute token-level accuracy
+    accuracy = (correct_predictions / total_predictions) * 100
+
+    # Print metrics
+    print(f"\nAverage Latency: {avg_latency * 1000:.2f} ms/query")
+    print(f"Throughput: {throughput:.2f} tokens/second")
     print(f"Memory Usage: {total_memory_usage:.2f} GB")
+    print(f"Perplexity: {perplexity.item():.2f}")
+    print(f"Token-Level Accuracy: {accuracy:.2f}%")
 
 
-inference(model_parallel_inference, valid_loader)
+inference(model_parallel_inference_with_loss, valid_loader)

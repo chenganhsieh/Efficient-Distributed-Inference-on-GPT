@@ -1,3 +1,10 @@
+baseline:
+Average Latency per Batch: 222.27 ms
+Throughput: 921.91 tokens/second
+Memory Usage: 3.15 GB
+Perplexity: 182.12
+Token-Level Accuracy: 0.72%
+
 model_paralleism:
 Average Latency: 121.02 ms/query
 Throughput: 65.99 queries/second
