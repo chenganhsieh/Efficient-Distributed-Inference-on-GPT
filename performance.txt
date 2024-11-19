@@ -1,0 +1,10 @@
+model_paralleism:
+Average Latency: 121.02 ms/query
+Throughput: 65.99 queries/second
+Memory Usage: 1.95 GB
+
+knowledge_distill
+Average Latency: 46.27 ms/query
+Throughput: 172.60 queries/second
+Memory Usage: 3.65 GB
+
