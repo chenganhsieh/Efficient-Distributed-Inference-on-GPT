@@ -175,7 +175,7 @@ def measure_inference_metrics(model, dataloader):
     accuracy = (correct_predictions / total_predictions) * 100
 
     # Print metrics
-    print(f"Average Latency: {avg_latency * 1000:.2f} ms/query")
+    print(f"Average Latency: {avg_latency * 1000:.2f} ms/batch")
     print(f"Throughput: {throughput:.2f} tokens/second")
     print(f"Memory Usage: {memory_usage:.2f} GB")
     print(f"Perplexity: {perplexity.item():.2f}")
