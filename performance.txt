@@ -6,9 +6,11 @@ Perplexity: 182.12
 Token-Level Accuracy: 0.72%
 
 model_paralleism:
-Average Latency: 121.02 ms/query
-Throughput: 65.99 queries/second
-Memory Usage: 1.95 GB
+Average Latency: 21.78 ms/batch
+Throughput: 9408.55 tokens/second
+Memory Usage: 2.40 GB
+Perplexity: 182.12
+Token-Level Accuracy: 0.72%
 
 knowledge_distill
 Average Latency: 46.27 ms/query

@@ -21,29 +21,31 @@ class GPT2Segment1(nn.Module):
         # Copy other necessary components
         self.dropout = original_model.transformer.drop
         self.config = original_model.config
+        self.dtype = original_model.dtype
 
     def forward(self, input_ids, attention_mask=None):
         batch_size = input_ids.shape[0]
         device = input_ids.device
         # Create position ids
         position_ids = torch.arange(0, input_ids.size(1), dtype=torch.long, device=device)
-        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+        position_ids = position_ids.unsqueeze(0)
         # Get embeddings
         inputs_embeds = self.wte(input_ids) + self.wpe(position_ids)
         hidden_states = self.dropout(inputs_embeds)
         attention_mask = attention_mask.view(batch_size, -1) if attention_mask is not None else None
-
+        
         # **Modify attention_mask**
         if attention_mask is not None:
             attention_mask = attention_mask[:, None, None, :]
-            # attention_mask = attention_mask.to(dtype=input_ids.dtype)
-            # attention_mask = (1.0 - attention_mask) * torch.finfo(input_ids.dtype).min
-       
+            attention_mask = attention_mask.to(dtype=self.dtype)
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+
         # Apply transformer blocks
         for block in self.transformer_blocks:
             outputs = block(hidden_states, attention_mask=attention_mask)
             hidden_states = outputs[0]
-        return hidden_states
+
+        return hidden_states, attention_mask
 
 
 class GPT2Segment2(nn.Module):
@@ -52,25 +54,18 @@ class GPT2Segment2(nn.Module):
         # Register the remaining transformer blocks
         self.transformer_blocks = nn.ModuleList(original_model.transformer.h[12:])
         # Copy layer normalization and output head
-        self.ln_f = nn.LayerNorm(original_model.transformer.ln_f.normalized_shape, eps=original_model.transformer.ln_f.eps)
+        self.ln_f = original_model.transformer.ln_f
         self.lm_head = nn.Linear(original_model.lm_head.in_features, original_model.lm_head.out_features, bias=False)
         self.lm_head.weight = original_model.lm_head.weight
-        self.dropout = original_model.transformer.drop
         self.config = original_model.config
+        self.dtype = original_model.dtype
 
     def forward(self, hidden_states, attention_mask=None):
-        device = next(self.parameters()).device
-        # **Modify attention_mask**
-        
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, None, None, :]
-            # attention_mask = attention_mask.to(dtype=self.dtype)
-            # attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
         # Apply transformer blocks
         for block in self.transformer_blocks:
             outputs = block(hidden_states, attention_mask=attention_mask)
             hidden_states = outputs[0]
+        
         # Apply layer normalization
         hidden_states = self.ln_f(hidden_states)
         # Get logits
@@ -84,12 +79,11 @@ def model_parallel_inference_with_loss(input_ids, attention_mask=None, labels=No
     labels = labels.to(device1) if labels is not None else None  # Labels needed on device1 for loss calculation
 
     # Forward pass through segment 1
-    hidden_states = model_segment1(input_ids, attention_mask=attention_mask)
-
+    hidden_states, attention_mask = model_segment1(input_ids, attention_mask=attention_mask)
     # Move hidden_states to device1
-    hidden_states = hidden_states.to(device1)
+    hidden_states = hidden_states.to('cpu').to(device1)
     if attention_mask is not None:
-        attention_mask = attention_mask.to(device1)
+        attention_mask = attention_mask.to('cpu').to(device1)
 
     # Forward pass through segment 2
     logits = model_segment2(hidden_states, attention_mask=attention_mask)
@@ -114,7 +108,7 @@ tokenizer.pad_token = tokenizer.eos_token
 
 # Tokenize the dataset
 def tokenize_function(examples):
-    return tokenizer(examples, return_tensors='pt', padding=True, truncation=True, max_length=128)
+    return tokenizer(examples, return_tensors='pt', padding='max_length', max_length=128)
 
 valid_encodings = tokenize_function(valid_texts)
 
@@ -195,7 +189,7 @@ def inference(model_fn, dataloader):
     accuracy = (correct_predictions / total_predictions) * 100
 
     # Print metrics
-    print(f"\nAverage Latency: {avg_latency * 1000:.2f} ms/query")
+    print(f"\nAverage Latency: {avg_latency * 1000:.2f} ms/batch")
     print(f"Throughput: {throughput:.2f} tokens/second")
     print(f"Memory Usage: {total_memory_usage:.2f} GB")
     print(f"Perplexity: {perplexity.item():.2f}")
