@@ -7,7 +7,7 @@ Efficient distributed inference of large-scale machine learning models presents 
 | Model              | Average Latency       | Throughput            | Memory Usage (GB) | Perplexity | Token-Level Accuracy |
 |--------------------|-----------------------|-----------------------|-------------------|------------|----------------------|
 | Baseline           | 222.27 ms/batch       | 921.91 tokens/sec     | 3.15              | 182.12     | 0.72%                |
-| Knowledge Distill  | 7.03 ms/query        | 29129.64 queries/sec    | 3.62              | 150.87        | 0.69%                  |
+| Knowledge Distill  | 7.03 ms/batch        | 29129.64 queries/sec    | 3.62              | 150.87        | 0.69%                  |
 | Model Parallelism  | 21.78 ms/batch        | 9,408.55 tokens/sec   | 2.40              | 182.12     | 0.72%                |
 | Tensor Partition   | xx ms/batch           | xx tokens/sec         | xx                | xx         | xx%                  |
 

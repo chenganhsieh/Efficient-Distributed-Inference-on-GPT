@@ -12,7 +12,7 @@ Memory Usage: 3.62 GB
 Perplexity: 150.87
 Token-Level Accuracy: 0.69%
 
-model_paralleism:
+pipeline_paralleism:
 Average Latency: 21.78 ms/batch
 Throughput: 9408.55 tokens/second
 Memory Usage: 2.40 GB
@@ -20,11 +20,11 @@ Perplexity: 182.12
 Token-Level Accuracy: 0.72%
 
 tensor_parition:
-Average Latency: xx ms/batch
-Throughput: xx tokens/second
-Memory Usage: xx GB
-Perplexity: xx
-Token-Level Accuracy: xx%
+Average Latency: 21.39 ms/batch
+Throughput: 9578.87 tokens/second
+Memory Usage: 2.70 GB
+Perplexity: 182.12
+Token-Level Accuracy: 0.72%
 
 
 
