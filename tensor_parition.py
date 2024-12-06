@@ -1,6 +1,8 @@
 import torch
 import math
 import time
+import psutil
+import os
 from torch import nn
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 from datasets import load_dataset
@@ -25,7 +27,7 @@ def load_dataset_and_prepare(tokenizer):
     tokenized_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask'])
 
     # Create a DataLoader
-    valid_loader = torch.utils.data.DataLoader(tokenized_dataset, batch_size=8)
+    valid_loader = torch.utils.data.DataLoader(tokenized_dataset, batch_size=64)
 
     # input_ids = torch.stack(valid_encodings['input_ids'])
     # attention_mask = torch.stack(valid_encodings['attention_mask'])
@@ -200,15 +202,6 @@ def model_inference_with_loss(model, input_ids, attention_mask=None):
     logits = output.logits
     loss = output.loss
     return logits, loss
-    # Compute loss if labels are provided
-    # if labels is not None:
-    #     loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-    #     shift_logits = logits[..., :-1, :].contiguous()
-    #     shift_labels = labels[..., 1:].contiguous()  # Shift labels to align with logits
-    #     loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    #     return logits, loss
-    # else:
-    #     return logits, None
 
 def inference(model, dataloader, tokenizer):
     latencies = []
@@ -255,6 +248,8 @@ def inference(model, dataloader, tokenizer):
     throughput = total_tokens / total_time  # Tokens per second
 
     # Compute memory usage
+    memory_usage_cpu = psutil.Process(os.getpid()).memory_info().rss / (1024 ** 3)
+
     memory_usage0 = torch.cuda.max_memory_allocated(device0) / (1024 ** 3)
     memory_usage1 = torch.cuda.max_memory_allocated(device1) / (1024 ** 3)
     total_memory_usage = memory_usage0 + memory_usage1
@@ -269,7 +264,8 @@ def inference(model, dataloader, tokenizer):
     # Print metrics
     print(f"\nAverage Latency: {avg_latency * 1000:.2f} ms/batch")
     print(f"Throughput: {throughput:.2f} tokens/second")
-    print(f"Memory Usage: {total_memory_usage:.2f} GB")
+    print(f"CPU Memory Usage: {memory_usage_cpu:.2f} GB")
+    print(f"Total GPU Memory Usage: {total_memory_usage:.2f} GB")
     print(f"Perplexity: {perplexity.item():.2f}")
     print(f"Token-Level Accuracy: {accuracy:.2f}%")
 

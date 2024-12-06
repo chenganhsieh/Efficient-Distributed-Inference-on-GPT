@@ -114,7 +114,7 @@ valid_encodings = tokenize_function(valid_texts)
 
 # Create DataLoader
 valid_dataset = torch.utils.data.TensorDataset(valid_encodings['input_ids'], valid_encodings['attention_mask'])
-valid_loader = DataLoader(valid_dataset, batch_size=8)
+valid_loader = DataLoader(valid_dataset, batch_size=64)
 
 
 # Assume two GPUs are available
@@ -177,6 +177,8 @@ def inference(model_fn, dataloader):
     throughput = total_tokens / total_time  # Tokens per second
 
     # Compute memory usage
+    memory_usage_cpu = psutil.Process(os.getpid()).memory_info().rss / (1024 ** 3)
+
     memory_usage0 = torch.cuda.max_memory_allocated(device0) / (1024 ** 3)
     memory_usage1 = torch.cuda.max_memory_allocated(device1) / (1024 ** 3)
     total_memory_usage = memory_usage0 + memory_usage1
@@ -191,7 +193,8 @@ def inference(model_fn, dataloader):
     # Print metrics
     print(f"\nAverage Latency: {avg_latency * 1000:.2f} ms/batch")
     print(f"Throughput: {throughput:.2f} tokens/second")
-    print(f"Memory Usage: {total_memory_usage:.2f} GB")
+    print(f"CPU Memory Usage: {memory_usage_cpu:.2f} GB")
+    print(f"Total GPU Memory Usage: {total_memory_usage:.2f} GB")
     print(f"Perplexity: {perplexity.item():.2f}")
     print(f"Token-Level Accuracy: {accuracy:.2f}%")
 

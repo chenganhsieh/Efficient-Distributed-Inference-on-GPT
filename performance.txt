@@ -1,29 +1,43 @@
 baseline:
-Average Latency per Batch: 222.27 ms
-Throughput: 921.91 tokens/second
-Memory Usage: 3.15 GB
-Perplexity: 182.12
+Average Latency per Batch: 37.82 ms
+Throughput: 10835.10 tokens/second
+CPU Memory Usage: 2.81 GB
+Total GPU Memory Usage: 4.01 GB
+Perplexity: 179.98
 Token-Level Accuracy: 0.72%
 
 knowledge_distill
-Average Latency: 7.03 ms/batch
-Throughput: 29129.64 tokens/second
-Memory Usage: 3.62 GB
-Perplexity: 150.87
+Average Latency: 12.33 ms/batch
+Throughput: 33234.49 tokens/second
+CPU Memory Usage: 2.57 GB
+Total GPU Memory Usage: 2.07 GB
+Perplexity: 149.16
 Token-Level Accuracy: 0.69%
 
+data_paralleism
+Average Latency per Batch: 349.10 ms
+Throughput: 1173.97 tokens/second
+CPU Memory Usage: 4.28 GB
+GPU 0 Memory Usage: 3.34 GB
+GPU 1 Memory Usage: 2.21 GB
+Total GPU Memory Usage: 5.55 GB
+Perplexity: 182.07
+Token-Level Accuracy: 0.72%
+
 pipeline_paralleism:
-Average Latency: 21.78 ms/batch
-Throughput: 9408.55 tokens/second
-Memory Usage: 2.40 GB
-Perplexity: 182.12
+Average Latency: 41.55 ms/batch
+Throughput: 9863.98 tokens/second
+CPU Memory Usage: 3.14 GB
+Total GPU Memory Usage: 3.25 GB
+Perplexity: 179.98
 Token-Level Accuracy: 0.72%
 
 tensor_parition:
-Average Latency: 21.39 ms/batch
-Throughput: 9578.87 tokens/second
-Memory Usage: 2.70 GB
-Perplexity: 182.12
+Average Latency: 42.03 ms/batch
+Throughput: 9751.51 tokens/second
+CPU Memory Usage: 3.06 GB
+Total GPU Memory Usage: 3.85 GB
+Perplexity: 179.98
 Token-Level Accuracy: 0.72%
 
 

@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=2,3 python model_parallelism.py
+CUDA_VISIBLE_DEVICES=2,3 python pipeline_parallelism.py
